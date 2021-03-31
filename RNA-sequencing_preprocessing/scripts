@@ -1,0 +1,18 @@
+## FastQC
+# Requires a list of the sequencing files in a text file to run a for loop on
+for next in $(cat reads.txt); do fastq-dump --gzip $next; done
+
+## Trimmomactic
+# Requires the Illumina clipping files and standard parameters from the Trimmomatic website
+for file in rawreads/*; do java -jar $EBROOTTRIMMOMATIC/trimmomatic-0.39.jar SE "$file" "$file" ILLUMINACLIP:TruSeq3-SE.fa:2:30:10:2:keepBothReads LEADING:3 TRAILING:3 MINLEN:36; done 
+
+## Salmon mapping
+# Requires a transcript index built with Salmon on the predicted hg19 transcriptome downloaded from NCBI
+salmon quant -i ../../../../Transcriptome/Validation_31012020/transcripts_index -l A -r rawreads/"$next"_output.fq.gz -o "$next"_mapping
+
+## Transcript quantification
+# Requires a list of all the quant files from Salmon in a text file
+ls *_mapping/*quant.sf >> listofquant.txt
+
+module load r/3.4.2-bioconductor-foss-2017a
+/pkg/suse12/software/trinity/2.5.1-foss-2016a/trinityrnaseq-Trinity-v2.5.1/util/abundance_estimates_to_matrix.pl --est_method salmon --gene_trans_map none --quant_files listofquant.txt
