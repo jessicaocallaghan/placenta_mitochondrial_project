@@ -1,0 +1,46 @@
+## Data analysis of publiclly available datasets after preprocessing
+# Load packages
+library(tibble)
+library(reshape)
+library(ggplot2)
+library(tidyverse)
+library(Rmisc)
+
+# Load public expression matrix from SALMON and clinical data from GEOquery
+# PRJNA358255 as an example
+
+# Import data
+PRJNA358255_expression <- read.table("../../../Transcriptome/Validation_31012020/RNA-Seq/PRJNA358255/salmon.isoform.TMM.EXPR.matrix")
+PRJNA358255_clinical <- read.csv("../../../Transcriptome/Validation_31012020/RNA-Seq/PRJNA358255/clinical_data.csv")
+
+# Create ExpressionSet from above files
+PRJNA358255_expression <- as.matrix(PRJNA358255_expression)
+PRJNA358255_clinical <- column_to_rownames(PRJNA358255_clinical, var = "variable")
+PRJNA358255_clinical <- new("AnnotatedDataFrame", data=PRJNA358255_clinical)
+all(rownames(PRJNA358255_clinical)==colnames(PRJNA358255_expression))
+PRJNA358255_eset <- ExpressionSet(assayData=PRJNA358255_expression, phenoData=PRJNA358255_clinical)
+
+birthweight <- pData(PRJNA358255_eset)$birth_weight
+age <- pData(PRJNA358255_eset)$age
+sex <- factor(pData(PRJNA358255_eset)$sex, levels = c("female", "male"))
+
+# Run the limma analysis with the different cofounders
+design <- model.matrix(~ 0 + birthweight + sex + age)
+fit <- lmFit(PRJNA358255_eset, design)
+EbfitCont_beta = eBayes(fit)
+summary(decideTests(EbfitCont_beta))
+
+# Pull out significant transcripts
+PRJNA358255_bw <- topTable(EbfitCont_beta, coef=1, n=Inf, adjust.method = "BH")
+PRJNA358255_bw <- rownames_to_column(PRJNA358255_bw)
+names(PRJNA358255_bw)[1] <- "transcriptid"
+
+# Import list of transcripts that we are attempted to validate
+candidates <- read.csv("candidates.csv")
+# Filtered the signficant dataset by these candidates
+PRJNA358255_filtered <- merge(PRJNA358255_bw, candidates, by = c("transcriptid"))
+names(PRJNA358255_filtered)[6] <- "sig"
+PRJNA358255_filtered <- PRJNA358255_filtered %>% filter(sig <= 0.05)
+
+## This process was completed mutiple times with the different RNA-sequencing datasets and their corresponding confounders. 
+## The same method was used for the microarray datasets that were pulled from GEOquery
